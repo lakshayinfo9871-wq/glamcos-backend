@@ -13,5 +13,5 @@ router.use('/banners',    require('./bannerRoutes'));
 // ── Phase 2 routes ──────────────────────────────────────────────────────────
 router.use('/providers',  require('./providerRoutes'));
 router.use('/loyalty',    require('./loyaltyRoutes'));
-
+router.use('/jobs',       require('./jobRoutes'));
 module.exports = router;
