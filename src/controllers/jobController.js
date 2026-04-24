@@ -224,7 +224,7 @@ const applyForJob = asyncHandler(async (req, res) => {
 
   job.applications.push({
     applicant:   userId,
-    coverLetter: req.body.coverLetter || '',
+    coverLetter: req.body.coverLetter || req.body.coverNote || '',
     resumeUrl:   req.body.resumeUrl   || '',
   });
   job.applicationCount = job.applications.length;
@@ -269,7 +269,7 @@ const getMyListings = asyncHandler(async (req, res) => {
 
 // ── Get applicants for a specific job ─────────────────────────────────────────
 const getJobApplications = asyncHandler(async (req, res) => {
-  const job = await Job.findById(req.params.id).populate('applications.applicant', 'name email phone');
+  const job = await Job.findById(req.params.id).populate('applications.applicant', 'firstName lastName name email phone');
   if (!job) throw ApiError.notFound('Job not found');
 
   return ApiResponse.success(res, { data: job.applications, message: 'Applicants fetched' });
