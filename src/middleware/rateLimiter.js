@@ -20,23 +20,23 @@ const createLimiter = (options = {}) => {
   });
 };
 
-// General API limiter
+// General API limiter — raised to 1000/15min to support normal app usage
 const apiLimiter = createLimiter({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 1000,
 });
 
 // Strict limiter for auth routes (login/register)
 const authLimiter = createLimiter({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 30,
   message: 'Too many authentication attempts. Please try again after 15 minutes.',
 });
 
 // Relaxed limiter for read-heavy routes
 const readLimiter = createLimiter({
   windowMs: 15 * 60 * 1000,
-  max: 200,
+  max: 2000,
 });
 
 module.exports = { createLimiter, apiLimiter, authLimiter, readLimiter };
