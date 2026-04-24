@@ -241,13 +241,23 @@ const adminReviewJob = asyncHandler(async (req, res) => {
   const job = await Job.findById(id);
   if (!job) throw ApiError.notFound('Job not found');
 
+  const prevStatus = job.adminStatus;
+
   if (action === 'approve') {
     job.adminStatus = 'approved';
     job.isActive    = true;
   } else if (action === 'reject') {
-    job.adminStatus      = 'rejected';
-    job.isActive         = false;
+    job.adminStatus       = 'rejected';
+    job.isActive          = false;
     job.adminRejectReason = reason || 'Listing not approved';
+
+    // Decrement employer activeListings so they can re-post
+    if (job.postedBy && prevStatus !== 'rejected') {
+      await EmployerProfile.findOneAndUpdate(
+        { user: job.postedBy },
+        { $inc: { activeListings: -1 } }
+      );
+    }
   } else {
     throw ApiError.badRequest('action must be approve or reject');
   }

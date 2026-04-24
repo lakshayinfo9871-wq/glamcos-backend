@@ -97,6 +97,7 @@ const postJob = asyncHandler(async (req, res) => {
   }
 
   // Check employer registration
+  let empProfileForLink = null;
   if (req.user) {
     const EmployerProfile = require('../models/EmployerProfile');
     const empProfile = await EmployerProfile.findOne({ user: req.user._id || req.user.id });
@@ -106,11 +107,19 @@ const postJob = asyncHandler(async (req, res) => {
     if (empProfile.status !== 'approved') {
       throw ApiError.badRequest('Your employer account is pending admin approval');
     }
-    // Check plan limits
+    // Check plan limits using a live DB count (ignores rejected/inactive jobs)
     const limits = empProfile.planLimits;
-    if (empProfile.activeListings >= limits.maxListings) {
-      throw ApiError.badRequest(`Your ${empProfile.subscriptionPlan} plan allows ${limits.maxListings} active listings. Please upgrade to post more.`);
+    const liveCount = await Job.countDocuments({
+      postedBy:    req.user._id || req.user.id,
+      adminStatus: { $in: ['pending_review', 'approved'] },
+    });
+    if (liveCount >= limits.maxListings) {
+      throw ApiError.badRequest(
+        `Your ${empProfile.subscriptionPlan} plan allows ${limits.maxListings} active listing${limits.maxListings !== 1 ? 's' : ''}. ` +
+        `You already have ${liveCount} pending or live listing${liveCount !== 1 ? 's' : ''}. Please upgrade your plan or wait for existing listings to close.`
+      );
     }
+    empProfileForLink = empProfile;
   }
 
   // Parse location string like "Mumbai, Maharashtra" into { city, state }
@@ -151,15 +160,11 @@ const postJob = asyncHandler(async (req, res) => {
   });
 
   // Link employer profile if exists
-  if (req.user) {
-    const EmployerProfile = require('../models/EmployerProfile');
-    const empProfile = await EmployerProfile.findOne({ user: req.user._id || req.user.id });
-    if (empProfile) {
-      job.employerProfile = empProfile._id;
-      empProfile.totalListings += 1;
-      empProfile.activeListings += 1;
-      await Promise.all([job.save(), empProfile.save()]);
-    }
+  if (empProfileForLink) {
+    job.employerProfile = empProfileForLink._id;
+    empProfileForLink.totalListings += 1;
+    empProfileForLink.activeListings += 1;
+    await Promise.all([job.save(), empProfileForLink.save()]);
   }
 
   return ApiResponse.created(res, { data: job, message: 'Job posted successfully' });
