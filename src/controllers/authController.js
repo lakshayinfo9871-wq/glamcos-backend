@@ -371,6 +371,114 @@ const updateLocation = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * @desc    Request password reset OTP
+ * @route   POST /api/v1/auth/forgot-password
+ * @access  Public
+ */
+const forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  if (!email) throw ApiError.badRequest('Email address is required');
+
+  const user = await User.findOne({ email: email.toLowerCase().trim() });
+
+  // Always return success — don't reveal if email exists (security)
+  if (!user) {
+    return ApiResponse.success(res, {
+      data: null,
+      message: 'If this email is registered, an OTP has been sent.',
+    });
+  }
+
+  // Generate 6-digit OTP
+  const crypto = require('crypto');
+  const otp    = Math.floor(100000 + Math.random() * 900000).toString();
+
+  // Store hashed OTP + 10-minute expiry
+  user.resetPasswordToken  = crypto.createHash('sha256').update(otp).digest('hex');
+  user.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
+  await user.save({ validateBeforeSave: false });
+
+  // Try to send email
+  const { sendEmail } = require('../utils/mailer');
+  const emailResult = await sendEmail({
+    to:      user.email,
+    subject: 'MACAW — Password Reset OTP',
+    text: [
+      `Hello ${user.firstName},`,
+      ``,
+      `Your password reset OTP is: ${otp}`,
+      ``,
+      `This OTP expires in 10 minutes.`,
+      `If you didn't request a password reset, please ignore this email.`,
+      ``,
+      `— MACAW Beauty Team`,
+    ].join('\n'),
+    html: `
+      <div style="font-family:sans-serif;max-width:400px;margin:auto;padding:24px">
+        <h2 style="color:#7C3AED">Password Reset</h2>
+        <p>Hello <strong>${user.firstName}</strong>,</p>
+        <p>Use the OTP below to reset your password:</p>
+        <div style="background:#F5F3FF;border-radius:12px;padding:20px;text-align:center;margin:20px 0">
+          <span style="font-size:36px;font-weight:900;letter-spacing:10px;color:#7C3AED">${otp}</span>
+        </div>
+        <p style="color:#888;font-size:13px">This OTP expires in 10 minutes.</p>
+        <p style="color:#888;font-size:13px">If you didn't request a password reset, ignore this email.</p>
+      </div>
+    `,
+  });
+
+  // In dev (no SMTP), include OTP hint in response so dev can test
+  const devNote = (!emailResult.success && process.env.NODE_ENV !== 'production')
+    ? { devOtp: otp, devNote: 'SMTP not configured — OTP shown here for dev/testing only' }
+    : {};
+
+  return ApiResponse.success(res, {
+    data: devNote,
+    message: 'If this email is registered, an OTP has been sent.',
+  });
+});
+
+/**
+ * @desc    Reset password using OTP
+ * @route   POST /api/v1/auth/reset-password
+ * @access  Public
+ */
+const resetPassword = asyncHandler(async (req, res) => {
+  const { email, otp, newPassword } = req.body;
+
+  if (!email || !otp || !newPassword) {
+    throw ApiError.badRequest('Email, OTP, and new password are all required');
+  }
+  if (newPassword.length < 8) {
+    throw ApiError.badRequest('Password must be at least 8 characters');
+  }
+
+  const crypto    = require('crypto');
+  const hashedOtp = crypto.createHash('sha256').update(otp.toString().trim()).digest('hex');
+
+  const user = await User.findOne({
+    email:               email.toLowerCase().trim(),
+    resetPasswordToken:  hashedOtp,
+    resetPasswordExpire: { $gt: Date.now() },
+  });
+
+  if (!user) {
+    throw ApiError.badRequest('Invalid or expired OTP. Please request a new one.');
+  }
+
+  // Set new password and clear reset fields
+  user.password            = newPassword;
+  user.resetPasswordToken  = undefined;
+  user.resetPasswordExpire = undefined;
+  await user.save();
+
+  return ApiResponse.success(res, {
+    data: null,
+    message: 'Password reset successfully. Please log in with your new password.',
+  });
+});
+
 module.exports = {
   register,
   login,
@@ -383,4 +491,6 @@ module.exports = {
   updateLocation,
   getAllUsers,
   updateUserStatus,
+  forgotPassword,
+  resetPassword,
 };

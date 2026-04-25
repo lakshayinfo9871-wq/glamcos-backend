@@ -13,6 +13,8 @@ const {
   updateLocation,
   getAllUsers,
   updateUserStatus,
+  forgotPassword,
+  resetPassword,
 } = require('../controllers/authController');
 
 const { protect, authorize } = require('../middleware/auth');
@@ -40,9 +42,11 @@ const changePasswordValidation = validate([
 ]);
 
 // ── Public Routes ─────────────────────────────────────────────────────────────
-router.post('/register',      authLimiter, registerValidation, register);
-router.post('/login',         authLimiter, loginValidation,    login);
-router.post('/refresh-token', authLimiter, refreshToken);
+router.post('/register',       authLimiter, registerValidation, register);
+router.post('/login',          authLimiter, loginValidation,    login);
+router.post('/refresh-token',  authLimiter, refreshToken);
+router.post('/forgot-password',authLimiter, forgotPassword);
+router.post('/reset-password', authLimiter, resetPassword);
 
 // ── Protected Routes ──────────────────────────────────────────────────────────
 router.get('/me',              protect, getMe);
@@ -53,7 +57,4 @@ router.put('/fcm-token',       protect, updateFCMToken);
 router.put('/location',        protect, updateLocation);
 
 // ── Admin Routes ──────────────────────────────────────────────────────────────
-router.get(  '/admin/users',            protect, authorize('admin', 'superadmin'), getAllUsers);
-router.put(  '/admin/users/:id/status', protect, authorize('admin', 'superadmin'), updateUserStatus);
-
-module.exports = router;
+router.get(  '/admin/users',            protect, authorize('admin'
